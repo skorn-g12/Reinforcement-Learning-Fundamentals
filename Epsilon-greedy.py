@@ -26,7 +26,7 @@ class Bandit:
 
 if __name__ == "__main__":
     epsilons = [0, 0.01, 0.1, 0.5]
-
+    plt.figure(figsize=(10, 6), tight_layout=True)
     explore_exploit_dict = {}
     for eps in epsilons:
         # Initialize a new bandit for each epsilon --> clean p_est
@@ -51,13 +51,18 @@ if __name__ == "__main__":
         t = [(num_times_explored/(MAX_EPOCHS-1)), (num_times_exploited/(MAX_EPOCHS - 1)) ]
         explore_exploit_dict[eps] = t # amount of times explored, exploited : in percentage
         print("estimates: eps: ", eps)
-        [print(b.p_est) for b in bandits] # Print estimate according to this epsilon run
-
-        plt.plot(np.cumsum(rewards)/(np.arange(MAX_EPOCHS)+ 1)) # Plot cumsum
+        [print(b.p_est) for b in bandits]  # Print estimate according to this epsilon run
+        print("explore exploit %", t)
+        print("explore exploit %", num_times_explored, num_times_exploited)
+        plt.plot(np.cumsum(rewards) / (np.arange(MAX_EPOCHS) + 1), '-')  # Plot cumsum
 
     print(explore_exploit_dict)
-    plt.ylabel("rewards")
+    plt.ylabel("Rewards")
     plt.xlabel("Epochs")
-    plt.legend([epsilons[0], epsilons[1], epsilons[2], epsilons[3]])
+    # plt.legend([epsilons[0], epsilons[1], epsilons[2], epsilons[3]])
+    plt.legend(
+        ["eps={}".format(epsilons[0]), "eps ={}".format(epsilons[1]), "eps ={}".format(epsilons[2]),
+         "eps={}".format(epsilons[3])])
+    plt.title('Cumulative rewards for different values of epsilon')
     plt.show()
 

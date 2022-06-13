@@ -83,6 +83,6 @@ if __name__ == "__main__":
     print(explore_exploit_dict)
     plt.ylabel("rewards")
     plt.xlabel("Epochs")
-    # plt.legend(["epsilon greedy with 0.1", "Optimistic initial values(10)", "UCB 1"])
-    plt.legend(["epsilon greedy with 0.1", "UCB 1"])
+    plt.legend(["epsilon greedy with 0.1", "Optimistic initial values(10)", "UCB 1"])
+    # plt.legend(["epsilon greedy with 0.1", "UCB 1"])
     plt.show()
