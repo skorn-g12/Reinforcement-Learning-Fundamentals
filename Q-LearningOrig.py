@@ -1,7 +1,6 @@
 import numpy as np
 import GridWorld
 from collections import defaultdict
-from sklearn.kernel_approximation import Nystroem, RBFSampler
 
 # Let's have all the constants up front
 states = [(0, 0), (0, 1), (0, 2), (0, 3),
@@ -14,30 +13,51 @@ actions = {(0, 0): ("D", "R"), (0, 1): ("L", "R"), (0, 2): ("L", "D", "R"),
 
 terminal_states = [(0, 3), (1, 3)]
 
+
 permissible_initial_states = [(0, 0), (0, 1), (0, 2),
                               (1, 0), (1, 2),
                               (2, 0), (2, 1), (2, 2), (2, 3)]
+
+
+# Fixed policy
 """
-policy = {}
-for s in actions.keys():
-    policy[s] = np.random.choice(actions[s])
-"""
+policy = {
+    (0, 0): {'R': 1.0},
+    (0, 1): {'R': 1.0},
+    (0, 2): {'L': 1.0},
+
+    (1, 0): {'U': 1.0},
+    (1, 2): {'U': 1.0},
+
+    (2, 0): {'U': 1.0},
+    (2, 1): {'R': 1.0},
+    (2, 2): {'U': 1.0},
+    (2, 3): {'U': 1.0}
+  }
+
+
 policy = {
     (0, 0): 'R',
     (0, 1): 'R',
-    (0, 2): 'R',
+    (0, 2): 'L',
 
     (1, 0): 'U',
     (1, 2): 'U',
 
     (2, 0): 'U',
-    (2, 1): 'R',
-    (2, 2): 'U',
-    (2, 3): 'L'
-}
+    (2, 1): 'L',
+    (2, 2): 'R',
+    (2, 3): 'U'
+  }
+"""
+
+
+policy = {}
+for s in actions.keys():
+    policy[s] = np.random.choice(actions[s])
+
 
 number_to_action = {"U": 0, "D": 1, "L": 2, "R": 3}
-gamma = 0.9  # discount factor
 
 trans_probs = {((0, 0), "R"): 0.5,
                ((0, 0), "D"): 0.5,
@@ -76,7 +96,7 @@ for s in states:
 
 gamma = 0.9  # discount factor
 eps = 0.1
-ALPHA = 0.01
+
 
 Q = defaultdict(list)
 
@@ -96,79 +116,64 @@ def epsilon_greedy(s, policy):
     return a
 
 
-def gather_samples(n_episodes=10000):
-    samples = []
-    for _ in range(n_episodes):
-        # Start position and append
-        # Play an episode
-        start = (2, 0)
-        samples.append(start)
+def experiment():
+    gamma = 0.9  # discount factor
+    start = (2, 0)
+    grid = GridWorld.GridWorld(start, states, actions, terminal_states)
+    thr = 1e-5
+    iter = 0
+    alpha = 0.1
+    while iter < 10000:  # Convergence loop
         s = start
-        while True:
+        delta = 0
+        while True:  # Game loop
             if s in terminal_states:
                 break
-            a = np.random.choice(actions[s])
-            si, sj, r = grid.move(s, a)
-            s2 = (si, sj)
-            samples.append(s2)
-            s = s2
-    return samples
+            V_old = V[s]
+            grid.set_state(s)
 
-
-class Model:
-    def __init__(self):
-        samples = gather_samples()
-        # self.featurizer = Nystroem()
-        self.featurizer = RBFSampler()
-        self.featurizer.fit(samples)
-        dims = self.featurizer.n_components
-        self.w = np.zeros(dims)
-
-    def predict(self, s):  # Will return Vhat(s)
-        x = self.featurizer.transform([s])[0]
-        return x @ self.w  # Dot product
-
-    def phi_s(self, s):
-        x = self.featurizer.transform([s])[0]
-        return x
-
-
-def weightUpdateEq():
-    x = model.phi_s(s)
-    res = sum(map(lambda i: i * i, x))
-    variance = res / len(x)
-
-
-def experiment(model, grid, nEpisodes=5000):
-    epoch = 0
-    while epoch < nEpisodes:
-        s = start
-        while s not in terminal_states:
             a = epsilon_greedy(s, policy)
             si, sj, r = grid.move(s, a)
-            Vs = model.predict(s)
             s2 = (si, sj)
-            if s2 in terminal_states:
-                target = r
+
+            if s2 not in terminal_states:
+                # Get max_a
+                k = [-500] * len(actions[s2])
+                bCheck = 0
+                for idx, a_new in enumerate(actions[s2]):
+                    if Q[s2, a_new]:
+                        k[idx] = (Q[s2, a_new])
+                        bCheck = 1
+                a_max = 0
+                if bCheck == 1:
+                    max_a_idx = np.argmax(k)
+                    a_max = actions[s2][max_a_idx]
+                else:
+                    a_max = np.random.choice(actions[s2])
+                Q[s, a] = Q[s, a] + alpha * ((r + gamma * Q[s2, a_max]) - Q[s, a])
             else:
-                target = r + gamma * model.predict(s2)
-            error = target - Vs
-            model.w += ALPHA * error * model.phi_s(s)
+                Q[s, a] = Q[s, a] + alpha * (r - Q[s, a])  # Target is 0
             s = s2
-        epoch += 1
-        print(epoch)
+        iter += 1
+        # print("iter : ", iter)
+
+
+def print_value_for_policy(V):
+    for s in states:
+        print(" ", s, ": ", V[s])
 
 
 if __name__ == "__main__":
     start = (2, 0)
-    rbf = RBFSampler()
-    grid = GridWorld.GridWorld(start, states, actions, terminal_states)
-    model = Model()
-    experiment(model, grid)
-    print("policy: ", policy)
-    for s in states:
-        if s in terminal_states:
-            V[s] = 0
-        else:
-            V[s] = model.predict(s)
-        print(s, ": ", V[s])
+    print("initial policy", policy)
+    experiment()
+    for s in permissible_initial_states:
+        possible_actions = actions[s]
+        argmaxMe = []
+        for a in possible_actions:
+            argmaxMe.append(Q[s, a])
+        max_idx = np.argmax(argmaxMe)
+        policy[s] = possible_actions[max_idx]
+
+    print("Updated", policy)
+

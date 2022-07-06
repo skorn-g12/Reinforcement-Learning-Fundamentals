@@ -17,7 +17,7 @@ terminal_states = [(0, 3), (1, 3)]
 permissible_initial_states = [(0, 0), (0, 1), (0, 2),
                               (1, 0), (1, 2),
                               (2, 0), (2, 1), (2, 2), (2, 3)]
-"""
+
 policy = {}
 for s in actions.keys():
     policy[s] = np.random.choice(actions[s])
@@ -34,8 +34,8 @@ policy = {
     (2, 1): 'R',
     (2, 2): 'U',
     (2, 3): 'L'
-}
-
+  }
+"""
 number_to_action = {"U": 0, "D": 1, "L": 2, "R": 3}
 gamma = 0.9  # discount factor
 
@@ -88,11 +88,24 @@ for s in permissible_initial_states:
         returns[s, a] = []
 
 
-def epsilon_greedy(s, policy):
+def get_a_max(s, model):
+    k = [-500] * len(actions[s])
+    bCheck = 0
+    a_max = 0
+    for idx, a_new in enumerate(actions[s]):
+        k[idx] = model.compute_Qsa(s, a_new)
+    max_a_idx = np.argmax(k)
+    a_max = actions[s][max_a_idx]
+    a = a_max
+    return a
+
+
+def epsilon_greedy(s, model):
     if np.random.random() < eps:  # Randomly choose an action
         a = np.random.choice(actions[s])
     else:
-        a = policy[s]
+
+        a = get_a_max(s, model)
     return a
 
 
@@ -102,17 +115,35 @@ def gather_samples(n_episodes=10000):
         # Start position and append
         # Play an episode
         start = (2, 0)
-        samples.append(start)
         s = start
+        a = np.random.choice(actions[s])
+        a_one_hot = one_hot_encoder(a)
+
         while True:
             if s in terminal_states:
                 break
-            a = np.random.choice(actions[s])
+            vect = [s[0], s[1], a_one_hot[0], a_one_hot[1], a_one_hot[2], a_one_hot[3]]
+            samples.append(vect)
+
             si, sj, r = grid.move(s, a)
             s2 = (si, sj)
-            samples.append(s2)
             s = s2
+            a = 0
+            if s not in terminal_states:
+                a = np.random.choice(actions[s])
+                a_one_hot = one_hot_encoder(a)
     return samples
+
+
+def one_hot_encoder(a):
+    if a == "U":
+        return [1, 0, 0, 0]
+    elif a == "D":
+        return [0, 1, 0, 0]
+    elif a == "L":
+        return [0, 0, 1, 0]
+    elif a == "R":
+        return [0, 0, 0, 1]
 
 
 class Model:
@@ -124,19 +155,40 @@ class Model:
         dims = self.featurizer.n_components
         self.w = np.zeros(dims)
 
-    def predict(self, s):  # Will return Vhat(s)
+    def predict_V(self, s):  # Will return Vhat(s)
         x = self.featurizer.transform([s])[0]
         return x @ self.w  # Dot product
 
-    def phi_s(self, s):
-        x = self.featurizer.transform([s])[0]
+    def compute_Qsa(self, s, a):  #
+        one_hot_a = one_hot_encoder(a)
+        vect = [s[0], s[1], one_hot_a[0], one_hot_a[1], one_hot_a[2], one_hot_a[3]]
+        x = self.featurizer.transform([vect])[0]
+        return x @ self.w  # Dot product
+
+    def phi_s_a(self, s, a):
+        one_hot_a = one_hot_encoder(a)
+        vect = [s[0], s[1], one_hot_a[0], one_hot_a[1], one_hot_a[2], one_hot_a[3]]
+        # vect = [s[0], s[1], a]
+        x = self.featurizer.transform([vect])[0]
         return x
 
 
-def weightUpdateEq():
-    x = model.phi_s(s)
+def weightUpdateEq(s, a, w, error, model):
+    one_hot_a = one_hot_encoder(a)
+    vect = [s[0], s[1], one_hot_a[0], one_hot_a[1], one_hot_a[2], one_hot_a[3]]
+    x = model.featurizer.transform([vect])[0]
     res = sum(map(lambda i: i * i, x))
     variance = res / len(x)
+    l_inf = max(np.abs(w))
+    rho = 1e-3
+    delta = 1e-2
+    l_inf_p = max(delta, l_inf)
+    g = np.zeros(len(w))
+    for i in range(w.shape[0]):
+        g[i] = max(rho * l_inf_p, np.abs(w[i]))
+    g_bar = np.sum(g) / len(g)
+    w = w + ALPHA * (np.multiply(g, x) * error) / (variance * g_bar * len(w))
+    return w
 
 
 def experiment(model, grid, nEpisodes=5000):
@@ -144,17 +196,25 @@ def experiment(model, grid, nEpisodes=5000):
     while epoch < nEpisodes:
         s = start
         while s not in terminal_states:
-            a = epsilon_greedy(s, policy)
+            a = epsilon_greedy(s, model)
             si, sj, r = grid.move(s, a)
-            Vs = model.predict(s)
+            Qsa = model.compute_Qsa(s, a)
+            # Q[s, a] = Qsa
             s2 = (si, sj)
+            a2 = 0
             if s2 in terminal_states:
                 target = r
             else:
-                target = r + gamma * model.predict(s2)
-            error = target - Vs
-            model.w += ALPHA * error * model.phi_s(s)
+                amax = get_a_max(s2, model)
+                Qs2a2 = model.compute_Qsa(s2, amax)
+                # Q[s2, a2] = Qs2a2
+                target = r + gamma * Qs2a2
+                a2 = epsilon_greedy(s2, model)
+            error = target - Qsa
+            model.w = weightUpdateEq(s, a, model.w, error, model)
+            # model.w += ALPHA * (target - Qsa) * model.phi_s_a(s, a)
             s = s2
+            a = a2
         epoch += 1
         print(epoch)
 
@@ -162,13 +222,17 @@ def experiment(model, grid, nEpisodes=5000):
 if __name__ == "__main__":
     start = (2, 0)
     rbf = RBFSampler()
+    print("initial policy: ", policy)
     grid = GridWorld.GridWorld(start, states, actions, terminal_states)
     model = Model()
     experiment(model, grid)
-    print("policy: ", policy)
-    for s in states:
-        if s in terminal_states:
-            V[s] = 0
-        else:
-            V[s] = model.predict(s)
-        print(s, ": ", V[s])
+
+    for s in permissible_initial_states:
+        possible_actions = actions[s]
+        argmaxMe = []
+        for a in possible_actions:
+            Q[s, a] = model.compute_Qsa(s, a)
+            argmaxMe.append(Q[s, a])
+        max_idx = np.argmax(argmaxMe)
+        policy[s] = possible_actions[max_idx]
+    print("updated policy: ", policy)

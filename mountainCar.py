@@ -69,7 +69,7 @@ def play_one(model, env, gamma, eps=0.1):
         total_reward += r
         s = s2
         iters += 1
-        # env.render()
+        env.render()
     return total_reward
 
 

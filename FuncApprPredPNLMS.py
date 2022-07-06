@@ -22,6 +22,7 @@ policy = {}
 for s in actions.keys():
     policy[s] = np.random.choice(actions[s])
 """
+
 policy = {
     (0, 0): 'R',
     (0, 1): 'R',
@@ -34,7 +35,7 @@ policy = {
     (2, 1): 'R',
     (2, 2): 'U',
     (2, 3): 'L'
-}
+  }
 
 number_to_action = {"U": 0, "D": 1, "L": 2, "R": 3}
 gamma = 0.9  # discount factor
@@ -133,10 +134,20 @@ class Model:
         return x
 
 
-def weightUpdateEq():
+def weightUpdateEq(s, w, error):
     x = model.phi_s(s)
     res = sum(map(lambda i: i * i, x))
     variance = res / len(x)
+    l_inf = max(np.abs(w))
+    rho = 1e-3
+    delta = 1e-2
+    l_inf_p = max(delta, l_inf)
+    g = np.zeros(len(w))
+    for i in range(w.shape[0]):
+        g[i] = max(rho * l_inf_p, np.abs(w[i]))
+    g_bar = np.sum(g) / len(g)
+    w = w + ALPHA * (np.multiply(g, x)*error) / (variance * g_bar * len(w))
+    return w
 
 
 def experiment(model, grid, nEpisodes=5000):
@@ -153,7 +164,7 @@ def experiment(model, grid, nEpisodes=5000):
             else:
                 target = r + gamma * model.predict(s2)
             error = target - Vs
-            model.w += ALPHA * error * model.phi_s(s)
+            model.w = weightUpdateEq(s, model.w, error)
             s = s2
         epoch += 1
         print(epoch)
